@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terraform Private Modules</title>
+    <title>Terraform Google Modules</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -61,130 +61,138 @@
         .readme-container h2 {
             color: #4CAF50;
         }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 768px) {
-            .dropdown-container {
-                width: 90%;
-                margin: 10px auto;
-            }
-
-            select {
-                font-size: 14px;
-            }
-        }
     </style>
 </head>
 <body>
 
-<h1>Terraform Private Modules</h1>
+    <h1>Terraform Google Modules</h1>
 
-<div class="dropdown-container">
-    <label for="module-dropdown">Select Module:</label>
-    <select id="module-dropdown" onchange="updateSubmodules()">
-        <option value="">--Select Module--</option>
-        <option value="database">Database</option>
-        <option value="storage">Storage</option>
-        <option value="workflows">Workflows</option>
-    </select>
+    <div class="dropdown-container">
+        <!-- First Dropdown: Modules -->
+        <label for="module-dropdown">Select Module:</label>
+        <select id="module-dropdown" onchange="updateSubmodules()">
+            <option value="">--Select Module--</option>
+            <option value="database">Database</option>
+            <option value="storage">Storage</option>
+            <option value="workflows">Workflows</option>
+        </select>
 
-    <label for="submodule-dropdown">Select Submodule:</label>
-    <select id="submodule-dropdown" onchange="displayReadme()">
-        <option value="">--Select Submodule--</option>
-    </select>
-</div>
+        <!-- Second Dropdown: Submodules -->
+        <label for="submodule-dropdown">Select Submodule:</label>
+        <select id="submodule-dropdown" onchange="displayReadme()">
+            <option value="">--Select Submodule--</option>
+        </select>
+    </div>
 
-<div class="readme-container" id="readme-container">
-    <h2 id="readme-title">README</h2>
-    <pre id="readme-content"></pre>
-</div>
+    <div class="readme-container" id="readme-container">
+        <h2 id="readme-title">README</h2>
+        <pre id="readme-content"></pre>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/showdown/dist/showdown.min.js"></script>
-<script>
-    const moduleToSubmodules = {
-        database: ['SQL Instance'],
-        storage: ['Cloud Storage Bucket'],
-        workflows: ['Workflows Example'],
-    };
+    <script>
+        const moduleToSubmodules = {
+            database: ['SQL Instance'],
+            storage: ['Cloud Storage Bucket'],
+            workflows: ['Storage Example'],
+        };
 
-    const submoduleToReadme = {
-        'SQL Instance': { repo: 'GoogleCloudPlatformDevops/gcp-tf-modules', path: 'gcp-tf-storage/gcp-tf-storage-gcs/readme.md' },
-        'Cloud Storage Bucket': { repo: 'GoogleCloudPlatformDevops/gcp-tf-modules', path: 'storage/README.md' },
-        'Workflows Example': { repo: 'org-name/private-repo', path: 'workflows/README.md' },
-    };
+        const submoduleToReadme = {
+            'SQL Instance': `# Terraform Google SQL Instance - README
+## Introduction
+This Terraform configuration is designed to automate the provisioning of a Google Cloud SQL instance.
+...`,
+            'Cloud Storage Bucket': `# Terraform Module: GCP Cloud Storage Bucket
+## Overview
+This Terraform module provisions a Google Cloud Storage bucket on GCP.
+...`,
+            'Storage Example': 'external-url'
+        };
 
-    const converter = new showdown.Converter();
+        function updateSubmodules() {
+            const moduleDropdown = document.getElementById('module-dropdown');
+            const submoduleDropdown = document.getElementById('submodule-dropdown');
+            const selectedModule = moduleDropdown.value;
 
-    function updateSubmodules() {
-        const moduleDropdown = document.getElementById('module-dropdown');
-        const submoduleDropdown = document.getElementById('submodule-dropdown');
-        const selectedModule = moduleDropdown.value;
+            submoduleDropdown.innerHTML = '<option value="">--Select Submodule--</option>';
 
-        submoduleDropdown.innerHTML = '<option value="">--Select Submodule--</option>';
-
-        if (moduleToSubmodules[selectedModule]) {
-            moduleToSubmodules[selectedModule].forEach(submodule => {
-                const option = document.createElement('option');
-                option.value = submodule;
-                option.textContent = submodule;
-                submoduleDropdown.appendChild(option);
-            });
-        }
-    }
-
-    async function displayReadme() {
-        const submoduleDropdown = document.getElementById('submodule-dropdown');
-        const selectedSubmodule = submoduleDropdown.value;
-        const readmeContainer = document.getElementById('readme-container');
-        const readmeContent = document.getElementById('readme-content');
-        const readmeTitle = document.getElementById('readme-title');
-
-        if (!selectedSubmodule) {
-            readmeContainer.style.display = 'none';
-            return;
+            if (moduleToSubmodules[selectedModule]) {
+                moduleToSubmodules[selectedModule].forEach(submodule => {
+                    const option = document.createElement('option');
+                    option.value = submodule;
+                    option.textContent = submodule;
+                    submoduleDropdown.appendChild(option);
+                });
+            }
         }
 
-        readmeTitle.textContent = `${selectedSubmodule} - README`;
-        readmeContent.textContent = 'Loading...';
-        readmeContainer.style.display = 'block';
+        async function displayReadme() {
+            const submoduleDropdown = document.getElementById('submodule-dropdown');
+            const selectedSubmodule = submoduleDropdown.value;
+            const readmeContainer = document.getElementById('readme-container');
+            const readmeContent = document.getElementById('readme-content');
+            const readmeTitle = document.getElementById('readme-title');
 
-        try {
-            const { repo, path } = submoduleToReadme[selectedSubmodule];
-            const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
-            const token = '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'; // Replace with your PAT
+            if (!selectedSubmodule) {
+                readmeContainer.style.display = 'none';
+                return;
+            }
 
-            const response = await fetch(apiUrl, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: 'application/vnd.github.v3.raw',
+            readmeTitle.textContent = selectedSubmodule + ' - README';
+
+            if (submoduleToReadme[selectedSubmodule] === 'external-url') {
+                const url = 'https://raw.githubusercontent.com/testing-st/modules/main/README.md';
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Failed to fetch README');
+                    const data = await response.text();
+                    const plainText = removeMarkdown(data);
+                    readmeContent.textContent = plainText;
+                } catch (error) {
+                    readmeContent.textContent = `Error loading README: ${error.message}`;
                 }
-            });
+            } else {
+                const plainText = removeMarkdown(submoduleToReadme[selectedSubmodule]);
+                readmeContent.textContent = plainText;
+            }
 
-            if (!response.ok) throw new Error('Failed to fetch README');
-
-            const markdownText = await response.text();
-            const htmlContent = converter.makeHtml(markdownText);
-            readmeContent.innerHTML = htmlContent;
-        } catch (error) {
-            readmeContent.innerHTML = `<p style="color: red;">Unable to load README. Please try again later.</p>`;
-            console.error(error);
+            readmeContainer.style.display = 'block';
         }
-    }
-</script>
 
+        function removeMarkdown(markdown) {
+            return markdown
+                .replace(/#+\s/g, '') // Remove headers
+                .replace(/`{1,3}/g, '') // Remove inline and block code markers
+                .replace(/\*\*/g, '') // Remove bold markers
+                .replace(/- /g, '• ') // Replace list markers with bullets
+                .replace(/\[(.*?)\]\((.*?)\)/g, '$1') // Remove links
+                .replace(/!\[(.*?)\]\((.*?)\)/g, '') // Remove images
+                .replace(/>\s/g, ''); // Remove blockquotes
+        }
+    </script>
+
+    <link rel="stylesheet" href="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/themes/df-messenger-default.css">
+    <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
+    <df-messenger
+      project-id="optical-scarab-443717-b3"
+      agent-id="25857298-34ad-4b65-8bdc-4c83af416ed5"
+      language-code="en"
+      max-query-length="-1">
+      <df-messenger-chat-bubble
+       chat-title="terraform">
+      </df-messenger-chat-bubble>
+    </df-messenger>
+    <style>
+        df-messenger {
+            z-index: 999;
+            position: fixed;
+            --df-messenger-font-color: #000;
+            --df-messenger-font-family: Google Sans;
+            --df-messenger-chat-background: #f3f6fc;
+            --df-messenger-message-user-background: #d3e3fd;
+            --df-messenger-message-bot-background: #fff;
+            bottom: 16px;
+            right: 16px;
+        }
+    </style>
 </body>
 </html>
