@@ -1,0 +1,71 @@
+name: Landing zone Terraform
+description: Authenticate, rewrite module source, then plan or apply one stack.
+
+inputs:
+  working-directory:
+    required: true
+  var-file:
+    required: true
+  module-source:
+    required: true
+  command:
+    required: true
+    description: plan or apply
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: '${{ env.GCP_SA_KEY }}'
+
+    - uses: hashicorp/setup-terraform@v3
+
+    - name: Configure GitHub authentication for Terraform modules
+      shell: bash
+      run: |
+        if [ -n "${GH_TOKEN:-}" ]; then
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+        fi
+
+    - name: Terraform ${{ inputs.command }}
+      shell: bash
+      env:
+        TF_MODULE_SOURCE: ${{ inputs.module-source }}
+        TF_LOCK: ${{ env.TF_LOCK || 'false' }}
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.working-directory }}"
+        echo "Using module source: ${TF_MODULE_SOURCE}"
+        run_stack() {
+          local dir="$1"
+          (
+            cd "$dir"
+            find . -name "*.tf" -type f -exec sed -i -E "s|source[[:space:]]*=[[:space:]]*\".*__[^\"]*MODULE_SOURCE[^\"]*\"|source = \"${TF_MODULE_SOURCE}\"|g" {} \;
+            find . -name "*.tf" -type f -exec sed -i -E "s|source[[:space:]]*=[[:space:]]*\"(\\.\\./)+modules/|source = \"${TF_MODULE_SOURCE%//modules/*}//modules/|g" {} \;
+            grep -R "source *= " -n . || true
+            terraform init -input=false
+            if [ "${{ inputs.command }}" = "apply" ]; then
+              terraform plan -out=tfplan -var-file="${{ inputs.var-file }}" -lock=${TF_LOCK}
+              terraform apply -auto-approve tfplan
+            else
+              terraform plan -var-file="${{ inputs.var-file }}" -lock=${TF_LOCK}
+            fi
+          )
+        }
+        if [ -f "${{ inputs.var-file }}" ]; then
+          run_stack .
+        else
+          found=0
+          for dir in */; do
+            if [ -f "${dir}${{ inputs.var-file }}" ]; then
+              run_stack "$dir"
+              found=1
+            fi
+          done
+          if [ "$found" = 0 ]; then
+            echo "No ${{ inputs.var-file }} under ${PWD}"
+            exit 1
+          fi
+        fi
