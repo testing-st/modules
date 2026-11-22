@@ -1,0 +1,303 @@
+name: Landing Zone Apply
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "templates/**"
+      - "modules/**"
+      - ".github/workflows/lz-apply.yml"
+      - ".github/actions/lz-terraform/**"
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_LOCK: "false"
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      folders: ${{ steps.filter.outputs.folders }}
+      projects: ${{ steps.filter.outputs.projects }}
+      apis: ${{ steps.filter.outputs.apis }}
+      svc: ${{ steps.filter.outputs.svc }}
+      monitoring: ${{ steps.filter.outputs.monitoring }}
+      host_project: ${{ steps.filter.outputs.host_project }}
+      service_project: ${{ steps.filter.outputs.service_project }}
+      vpc: ${{ steps.filter.outputs.vpc }}
+      subnets: ${{ steps.filter.outputs.subnets }}
+      firewall: ${{ steps.filter.outputs.firewall }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          token: ${{ github.token }}
+          filters: |
+            folders:
+              - 'templates/folders/**'
+            projects:
+              - 'templates/project/**'
+            apis:
+              - 'templates/lz-apis/**'
+            svc:
+              - 'templates/lz-svc/**'
+            monitoring:
+              - 'templates/lz-central-monitoring/**'
+            host_project:
+              - 'templates/lz-host-project/**'
+            service_project:
+              - 'templates/lz-service-project/**'
+            vpc:
+              - 'templates/lz-vpc/**'
+            subnets:
+              - 'templates/lz-subnet/**'
+            firewall:
+              - 'templates/lz-vpc-firewall/**'
+      - name: Print detected changes
+        run: |
+          echo "folders=${{ steps.filter.outputs.folders }}"
+          echo "projects=${{ steps.filter.outputs.projects }}"
+          echo "apis=${{ steps.filter.outputs.apis }}"
+          echo "svc=${{ steps.filter.outputs.svc }}"
+          echo "monitoring=${{ steps.filter.outputs.monitoring }}"
+          echo "host_project=${{ steps.filter.outputs.host_project }}"
+          echo "service_project=${{ steps.filter.outputs.service_project }}"
+          echo "vpc=${{ steps.filter.outputs.vpc }}"
+          echo "subnets=${{ steps.filter.outputs.subnets }}"
+          echo "firewall=${{ steps.filter.outputs.firewall }}"
+
+  folder-apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.folders == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply folders
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/folders
+          var-file: folder.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/folders?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  project-apply:
+    needs:
+      - detect-changes
+      - folder-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.projects == 'true' &&
+      (needs.detect-changes.outputs.folders != 'true' || needs.folder-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply projects
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/project
+          var-file: project.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/project?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  apis-apply:
+    needs:
+      - detect-changes
+      - project-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.apis == 'true' &&
+      (needs.detect-changes.outputs.projects != 'true' || needs.project-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply apis
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-apis
+          var-file: apis.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-apis?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  svc-apply:
+    needs:
+      - detect-changes
+      - apis-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.svc == 'true' &&
+      (needs.detect-changes.outputs.apis != 'true' || needs.apis-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply svc
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-svc
+          var-file: svc.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-service-account?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  monitoring-apply:
+    needs:
+      - detect-changes
+      - apis-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.monitoring == 'true' &&
+      (needs.detect-changes.outputs.apis != 'true' || needs.apis-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply monitoring
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-central-monitoring
+          var-file: moniprj.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-monitoring?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  host-project-apply:
+    needs:
+      - detect-changes
+      - apis-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.host_project == 'true' &&
+      (needs.detect-changes.outputs.apis != 'true' || needs.apis-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply host_project
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-host-project
+          var-file: host_project.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-host-project?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  service-project-apply:
+    needs:
+      - detect-changes
+      - host-project-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.service_project == 'true' &&
+      (needs.detect-changes.outputs.host_project != 'true' || needs.host-project-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply service_project
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-service-project
+          var-file: service_project.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-service-project?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  vpc-apply:
+    needs:
+      - detect-changes
+      - host-project-apply
+      - service-project-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.vpc == 'true' &&
+      (needs.detect-changes.outputs.host_project != 'true' || needs.host-project-apply.result == 'success') &&
+      (needs.detect-changes.outputs.service_project != 'true' || needs.service-project-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply vpc
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-vpc
+          var-file: vpc.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-vpc?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  subnets-apply:
+    needs:
+      - detect-changes
+      - vpc-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.subnets == 'true' &&
+      (needs.detect-changes.outputs.vpc != 'true' || needs.vpc-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply subnets
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-subnet
+          var-file: subnet.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-subnet?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  firewall-apply:
+    needs:
+      - detect-changes
+      - subnets-apply
+    if: |
+      always() &&
+      needs.detect-changes.outputs.firewall == 'true' &&
+      (needs.detect-changes.outputs.subnets != 'true' || needs.subnets-apply.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform apply firewall
+        uses: ./.github/actions/lz-terraform
+        with:
+          working-directory: templates/lz-vpc-firewall
+          var-file: firewall.tfvars
+          module-source: "git::https://github.com/testing-st/one-click-lz.git//modules/terraform-google-cloud-firewall?ref=main"
+          command: apply
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
